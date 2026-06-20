@@ -66,6 +66,7 @@ export function CreateDecorate({
   const [isSaving, setIsSaving] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
+  const [showMoveable, setShowMoveable] = useState(true);
 
   const [newText, setNewText] = useState('');
   const [textColor, setTextColor] = useState('#FF69B4');
@@ -129,12 +130,16 @@ export function CreateDecorate({
   const handleSave = async () => {
     setIsSaving(true);
     try {
+      setShowMoveable(false);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       const dataUrl = await generateFinalImage();
       onSave(dataUrl);
     } catch (err) {
       alert('Gagal menyimpan gambar. Coba lagi (pastikan semua foto sudah terisi).');
     } finally {
       setIsSaving(false);
+      setShowMoveable(true);
     }
   };
 
@@ -143,6 +148,9 @@ export function CreateDecorate({
   const handleDownload = async () => {
     setIsDownloading(true);
     try {
+      setShowMoveable(false);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       const dataUrl = await generateFinalImage();
       const a = document.createElement('a');
       a.href = dataUrl;
@@ -154,6 +162,7 @@ export function CreateDecorate({
       alert('Gagal mengunduh gambar. Coba lagi (pastikan semua foto sudah terisi).');
     } finally {
       setIsDownloading(false);
+      setShowMoveable(true);
     }
   };
 
@@ -436,6 +445,7 @@ export function CreateDecorate({
                 texts={texts}
                 watermark={true}
                 interactive={true}
+                showMoveable={showMoveable}
                 onUpdateSticker={(id, updates) => updateSticker(id, updates)}
                 onUpdateText={(id, updates) => updateText(id, updates)}
               />

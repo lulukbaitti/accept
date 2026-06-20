@@ -11,6 +11,7 @@ interface PhotostripPreviewProps {
   watermark?: boolean;
   scale?: number;
   interactive?: boolean;
+  showMoveable?: boolean;
   onUpdateSticker?: (id: string, updates: Partial<Sticker>) => void;
   onUpdateText?: (id: string, updates: Partial<TextItem>) => void;
 }
@@ -26,6 +27,7 @@ export const PhotostripPreview = forwardRef<HTMLDivElement, PhotostripPreviewPro
       watermark = true,
       scale = 1,
       interactive = false,
+      showMoveable = true,
       onUpdateSticker,
       onUpdateText,
     },
@@ -141,44 +143,47 @@ export const PhotostripPreview = forwardRef<HTMLDivElement, PhotostripPreviewPro
             {text.text}
           </div>
         ))}
-        <Moveable
-  target={
-    selectedSticker
-      ? document.getElementById(`sticker-${selectedSticker}`)
-      : null
-  }
-  draggable={true}
-  scalable={true}
-  rotatable={true}
-  pinchable={true}
-  keepRatio={true}
-  renderDirections={["nw", "ne", "sw", "se"]}
 
-  onDrag={({ left, top }) => {
-    if (selectedSticker) {
-      onUpdateSticker?.(selectedSticker, {
-        x: (left / width) * 100,
-        y: (top / height) * 100,
-      });
-    }
-  }}
+        {showMoveable && (
+          <Moveable
+            target={
+              selectedSticker
+                ? document.getElementById(`sticker-${selectedSticker}`)
+                : null
+            }
+            draggable
+            scalable
+            rotatable
+            pinchable
+            keepRatio
+            renderDirections={["nw", "ne", "sw", "se"]}
 
-  onScale={({ scale }) => {
-    if (selectedSticker) {
-      onUpdateSticker?.(selectedSticker, {
-        scale: scale[0],
-      });
-    }
-  }}
+            onDrag={({ left, top }) => {
+              if (selectedSticker && onUpdateSticker) {
+                onUpdateSticker(selectedSticker, {
+                  x: (left / width) * 100,
+                  y: (top / height) * 100,
+                });
+              }
+            }}
 
-  onRotate={({ beforeRotate }) => {
-    if (selectedSticker) {
-      onUpdateSticker?.(selectedSticker, {
-        rotation: beforeRotate,
-      });
-    }
-  }}
-/>
+            onScale={({ scale }) => {
+              if (selectedSticker && onUpdateSticker) {
+                onUpdateSticker(selectedSticker, {
+                  scale: scale[0],
+                });
+              }
+            }}
+
+            onRotate={({ beforeRotate }) => {
+              if (selectedSticker && onUpdateSticker) {
+                onUpdateSticker(selectedSticker, {
+                  rotation: beforeRotate,
+                });
+              }
+            }}
+          />
+        )}
       </div>
     );
   }
