@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Template, Photo, Sticker, TextItem } from '../types';
 import { STICKERS, BG_COLORS } from '../data/templates';
 import { PhotostripPreview } from '../components/PhotostripPreview';
-import { ArrowLeft, Save, Type, Smile, Trash2, Move, Palette, Info } from 'lucide-react';
+import { ArrowLeft, Save, Type, Smile, Trash2, Move, Palette, Info, Download } from 'lucide-react';
 import * as htmlToImage from 'html-to-image';
 
 // ─── Fix: pastikan SEMUA <img> di dalam node sudah benar-benar
@@ -64,6 +64,7 @@ export function CreateDecorate({
 }: Props) {
   const [activeTab, setActiveTab] = useState<'stickers' | 'text' | 'bg'>('stickers');
   const [isSaving, setIsSaving] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
 
   const [newText, setNewText] = useState('');
@@ -91,48 +92,68 @@ export function CreateDecorate({
   const removeSticker = (id: string) => onStickersChange(stickers.filter((s) => s.id !== id));
   const removeText = (id: string) => onTextsChange(texts.filter((t) => t.id !== id));
 
+  // Dipakai untuk drag-geser DAN slider ukuran/putar — satu sumber kebenaran
+  const updateSticker = (id: string, updates: Partial<Sticker>) =>
+    onStickersChange(stickers.map((s) => (s.id === id ? { ...s, ...updates } : s)));
+  const updateText = (id: string, updates: Partial<TextItem>) =>
+    onTextsChange(texts.map((t) => (t.id === id ? { ...t, ...updates } : t)));
+
+  // ─── Generate gambar final dari preview DOM, dipakai bersama oleh
+  // tombol "Simpan ke Galeri" maupun "Download". Lihat catatan di atas
+  // file ini soal kenapa langkah-langkah ini perlu ada.
+  const generateFinalImage = async (): Promise<string> => {
+    if (!previewRef.current) throw new Error('Preview belum siap');
+    const node = previewRef.current;
+    const options = { quality: 0.95, pixelRatio: 2, cacheBust: true };
+
+    try {
+      await (document as any).fonts?.ready;
+    } catch {
+      // Lanjut saja kalau API fonts.ready tidak didukung
+    }
+
+    await waitForImagesReady(node);
+    await waitTwoFrames();
+
+    await htmlToImage.toJpeg(node, options).catch(() => null);
+    await waitTwoFrames();
+
+    const dataUrl = await htmlToImage.toJpeg(node, options);
+
+    if (!dataUrl || dataUrl.length < 1000) {
+      throw new Error('Hasil gambar kosong');
+    }
+    return dataUrl;
+  };
+
   const handleSave = async () => {
-    if (!previewRef.current) return;
     setIsSaving(true);
     try {
-      const node = previewRef.current;
-      const options = { quality: 0.95, pixelRatio: 2, cacheBust: true };
-
-      // 1. Pastikan font custom (Cherry Bomb One, Pacifico, dll) sudah
-      //    benar-benar siap dipakai browser. Kalau belum, html-to-image
-      //    bisa fallback ke font default saat capture.
-      try {
-        await (document as any).fonts?.ready;
-      } catch {
-        // Lanjut saja kalau API fonts.ready tidak didukung
-      }
-
-      // 2. Pastikan semua <img> foto sudah selesai decode — ini akar
-      //    masalah "template kosong" di HP.
-      await waitForImagesReady(node);
-      await waitTwoFrames();
-
-      // 3. Render "pemanasan": di banyak browser HP (terutama Android
-      //    WebView), capture PERTAMA setelah gambar baru selesai decode
-      //    masih sering keluar kosong/putih. Render sekali, buang
-      //    hasilnya, baru render lagi untuk hasil final — ini workaround
-      //    yang sudah dikenal luas untuk bug html-to-image di mobile.
-      await htmlToImage.toJpeg(node, options).catch(() => null);
-      await waitTwoFrames();
-
-      const dataUrl = await htmlToImage.toJpeg(node, options);
-
-      // 4. Jaga-jaga: kalau hasilnya kosong/super kecil (gagal total),
-      //    jangan disimpan diam-diam sebagai foto kosong — kasih tahu user.
-      if (!dataUrl || dataUrl.length < 1000) {
-        throw new Error('Hasil gambar kosong');
-      }
-
+      const dataUrl = await generateFinalImage();
       onSave(dataUrl);
     } catch (err) {
       alert('Gagal menyimpan gambar. Coba lagi (pastikan semua foto sudah terisi).');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Download langsung ke HP/laptop — sama persis polanya dengan
+  // membuat link <a download> lalu meng-klik-nya secara terprogram.
+  const handleDownload = async () => {
+    setIsDownloading(true);
+    try {
+      const dataUrl = await generateFinalImage();
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `LensaLoka_${Date.now()}.jpg`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (err) {
+      alert('Gagal mengunduh gambar. Coba lagi (pastikan semua foto sudah terisi).');
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -195,16 +216,52 @@ export function CreateDecorate({
                 </div>
                 {stickers.length > 0 && (
                   <div className="mt-4 pt-4 border-t border-gray-100">
-                    <h4 className="font-bold text-xs sm:text-sm text-gray-700 mb-2">Stiker Aktif (klik untuk hapus)</h4>
-                    <div className="flex flex-wrap gap-2">
+                    <h4 className="font-bold text-xs sm:text-sm text-gray-700 mb-2">
+                      Stiker Aktif — atur ukuran & putar:
+                    </h4>
+                    <div className="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1">
                       {stickers.map((s) => (
-                        <button
+                        <div
                           key={s.id}
-                          onClick={() => removeSticker(s.id)}
-                          className="px-2.5 py-1 bg-red-50 text-red-500 rounded-full text-xs sm:text-sm flex items-center gap-1 hover:bg-red-100"
+                          className="bg-pink-50/60 border border-pink-100 p-3 rounded-xl text-xs sm:text-sm"
                         >
-                          {s.emoji} <Trash2 className="w-3 h-3" />
-                        </button>
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="text-xl">{s.emoji}</span>
+                            <button
+                              onClick={() => removeSticker(s.id)}
+                              className="text-red-400 bg-red-50 p-1.5 rounded-lg hover:bg-red-100"
+                              title="Hapus stiker"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <label className="flex flex-col gap-1">
+                              <span className="text-gray-500 font-medium">Ukuran</span>
+                              <input
+                                type="range"
+                                min="0.3"
+                                max="3"
+                                step="0.1"
+                                value={s.scale}
+                                onChange={(e) => updateSticker(s.id, { scale: parseFloat(e.target.value) })}
+                                className="accent-pink-600"
+                              />
+                            </label>
+                            <label className="flex flex-col gap-1">
+                              <span className="text-gray-500 font-medium">Putar</span>
+                              <input
+                                type="range"
+                                min="-180"
+                                max="180"
+                                step="5"
+                                value={s.rotation}
+                                onChange={(e) => updateSticker(s.id, { rotation: parseInt(e.target.value) })}
+                                className="accent-pink-600"
+                              />
+                            </label>
+                          </div>
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -260,15 +317,38 @@ export function CreateDecorate({
                 </div>
                 {texts.length > 0 && (
                   <div className="pt-4 border-t border-gray-100">
-                    <h4 className="font-bold text-xs sm:text-sm text-gray-700 mb-2">Teks Aktif (klik untuk hapus)</h4>
-                    <div className="flex flex-wrap gap-2">
+                    <h4 className="font-bold text-xs sm:text-sm text-gray-700 mb-2">
+                      Teks Aktif — atur ukuran:
+                    </h4>
+                    <div className="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1">
                       {texts.map((t) => (
-                        <button
-                          key={t.id} onClick={() => removeText(t.id)}
-                          className="px-2.5 py-1 bg-red-50 text-red-500 rounded-full text-xs sm:text-sm flex items-center gap-1 hover:bg-red-100"
+                        <div
+                          key={t.id}
+                          className="bg-pink-50/60 border border-pink-100 p-3 rounded-xl text-xs sm:text-sm"
                         >
-                          "{t.text}" <Trash2 className="w-3 h-3" />
-                        </button>
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="font-bold truncate max-w-[160px]">"{t.text}"</span>
+                            <button
+                              onClick={() => removeText(t.id)}
+                              className="text-red-400 bg-red-50 p-1.5 rounded-lg hover:bg-red-100"
+                              title="Hapus teks"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <label className="flex flex-col gap-1">
+                            <span className="text-gray-500 font-medium">Ukuran</span>
+                            <input
+                              type="range"
+                              min="0.3"
+                              max="3"
+                              step="0.1"
+                              value={t.scale}
+                              onChange={(e) => updateText(t.id, { scale: parseFloat(e.target.value) })}
+                              className="accent-pink-600 w-full"
+                            />
+                          </label>
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -304,13 +384,23 @@ export function CreateDecorate({
         {/* Tombol aksi mobile */}
         <div className="flex gap-3 xl:hidden">
           <button
-            onClick={onBack} disabled={isSaving}
+            onClick={onBack} disabled={isSaving || isDownloading}
             className="flex items-center gap-2 px-5 py-3 bg-white text-gray-700 border border-gray-200 rounded-full font-bold text-sm hover:bg-gray-50 transition-all disabled:opacity-50"
           >
             <ArrowLeft className="w-4 h-4" /> Retake
           </button>
           <button
-            onClick={handleSave} disabled={isSaving}
+            onClick={handleDownload} disabled={isSaving || isDownloading}
+            className="flex items-center justify-center gap-2 px-5 py-3 bg-white text-pink-600 border-2 border-pink-200 rounded-full font-bold text-sm hover:bg-pink-50 transition-all disabled:opacity-50"
+          >
+            {isDownloading ? (
+              <div className="w-4 h-4 border-2 border-pink-400 border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Download className="w-4 h-4" />
+            )}
+          </button>
+          <button
+            onClick={handleSave} disabled={isSaving || isDownloading}
             className="flex-1 flex items-center justify-center gap-2 px-5 py-3 bg-pink-600 text-white rounded-full font-bold text-sm hover:bg-pink-700 transition-all shadow-lg disabled:opacity-50"
           >
             {isSaving ? (
@@ -346,12 +436,8 @@ export function CreateDecorate({
                 texts={texts}
                 watermark={true}
                 interactive={true}
-                onUpdateSticker={(id, updates) =>
-                  onStickersChange(stickers.map((s) => (s.id === id ? { ...s, ...updates } : s)))
-                }
-                onUpdateText={(id, updates) =>
-                  onTextsChange(texts.map((t) => (t.id === id ? { ...t, ...updates } : t)))
-                }
+                onUpdateSticker={(id, updates) => updateSticker(id, updates)}
+                onUpdateText={(id, updates) => updateText(id, updates)}
               />
             </div>
           </div>
@@ -360,13 +446,25 @@ export function CreateDecorate({
         {/* Tombol aksi desktop */}
         <div className="hidden xl:flex flex-wrap justify-center gap-4 mt-5 w-full">
           <button
-            onClick={onBack} disabled={isSaving}
+            onClick={onBack} disabled={isSaving || isDownloading}
             className="flex items-center gap-2 px-6 py-3 bg-white text-gray-700 border border-gray-200 rounded-full font-bold hover:bg-gray-50 transition-all disabled:opacity-50"
           >
             <ArrowLeft className="w-5 h-5" /> Retake
           </button>
           <button
-            onClick={handleSave} disabled={isSaving}
+            onClick={handleDownload} disabled={isSaving || isDownloading}
+            className="flex items-center gap-2 px-6 py-3 bg-white text-pink-600 border-2 border-pink-200 rounded-full font-bold hover:bg-pink-50 transition-all disabled:opacity-50"
+          >
+            {isDownloading ? (
+              <span className="flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-pink-400 border-t-transparent rounded-full animate-spin" /> Mengunduh...
+              </span>
+            ) : (
+              <><Download className="w-5 h-5" /> Download</>
+            )}
+          </button>
+          <button
+            onClick={handleSave} disabled={isSaving || isDownloading}
             className="flex items-center gap-2 px-8 py-3 bg-pink-600 text-white rounded-full font-bold text-lg hover:bg-pink-700 transition-all shadow-lg disabled:opacity-50"
           >
             {isSaving ? (
