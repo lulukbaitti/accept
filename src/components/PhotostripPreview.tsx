@@ -43,7 +43,6 @@ export const PhotostripPreview = forwardRef<HTMLDivElement, PhotostripPreviewPro
     const [draggingId, setDraggingId] = useState<string | null>(null);
     const [dragType, setDragType] = useState<'sticker' | 'text' | null>(null);
     const [selectedSticker, setSelectedSticker] = useState<string | null>(null);
-    const [showMoveable, setShowMoveable] = useState(true);
 
     return (
       <div
