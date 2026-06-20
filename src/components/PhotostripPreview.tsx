@@ -142,6 +142,7 @@ export const PhotostripPreview = forwardRef<HTMLDivElement, PhotostripPreviewPro
               zIndex: draggingId === sticker.id ? 50 : 20,
               pointerEvents: "auto",
             }}
+            onPointerDown={(e) => handlePointerDown(e, sticker.id, 'sticker')}
           >
             {sticker.emoji}
           </div>
@@ -175,15 +176,11 @@ export const PhotostripPreview = forwardRef<HTMLDivElement, PhotostripPreviewPro
               : null
           }
           draggable={true}
-          scalable
-          rotatable
-          pinchable
-          keepRatio
-          origin={false}
-          edge={false}
+          scalable={true}
+          rotatable={true}
+          pinchable={true}
+          keepRatio={true}
           renderDirections={["nw", "ne", "sw", "se"]}
-          throttleScale={0}
-          pinchThreshold={0}
 
           onDrag={({ left, top }) => {
             if (selectedSticker) {
