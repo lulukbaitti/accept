@@ -5,11 +5,49 @@ import { PhotostripPreview } from '../components/PhotostripPreview';
 import { ArrowLeft, Save, Type, Smile, Trash2, Move, Palette, Info } from 'lucide-react';
 import * as htmlToImage from 'html-to-image';
 
+// ─── Fix: pastikan SEMUA <img> di dalam node sudah benar-benar
+// selesai di-decode sebelum di-screenshot. Tanpa ini, di HP
+// (terutama Android WebView/Chrome) html-to-image sering meng-capture
+// frame foto saat <img>-nya belum selesai decode → hasilnya kosong
+// (cuma template, tanpa foto), walau di laptop selalu aman karena
+// decode foto jauh lebih cepat. Prinsip ini sama persis dengan yang
+// dipakai versi "coklat": setiap foto di-await sampai benar-benar
+// loaded sebelum digambar — kita lakukan hal yang sama, hanya saja
+// targetnya elemen <img> di DOM, bukan canvas manual.
+async function waitForImagesReady(container: HTMLElement): Promise<void> {
+  const imgs = Array.from(container.querySelectorAll('img'));
+  await Promise.all(
+    imgs.map((img) => {
+      const tryDecode = () =>
+        typeof img.decode === 'function'
+          ? img.decode().catch(() => undefined)
+          : Promise.resolve();
+
+      if (img.complete && img.naturalWidth > 0) {
+        return tryDecode();
+      }
+      return new Promise<void>((resolve) => {
+        img.addEventListener('load', () => tryDecode().then(() => resolve()), { once: true });
+        img.addEventListener('error', () => resolve(), { once: true });
+      });
+    })
+  );
+}
+
+// Tunggu browser benar-benar selesai paint frame terbaru.
+// Satu requestAnimationFrame kadang tidak cukup di HP yang lambat,
+// jadi kita tunggu dua frame berturut-turut.
+function waitTwoFrames(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+}
+
 interface Props {
   template: Template;
   bgColor: string;
   onBgChange: (color: string) => void;
-  photos: Photo[];
+  photos: (Photo | null)[];
   stickers: Sticker[];
   onStickersChange: (stickers: Sticker[]) => void;
   texts: TextItem[];
@@ -57,10 +95,42 @@ export function CreateDecorate({
     if (!previewRef.current) return;
     setIsSaving(true);
     try {
-      const dataUrl = await htmlToImage.toJpeg(previewRef.current, { quality: 0.95, pixelRatio: 2 });
+      const node = previewRef.current;
+      const options = { quality: 0.95, pixelRatio: 2, cacheBust: true };
+
+      // 1. Pastikan font custom (Cherry Bomb One, Pacifico, dll) sudah
+      //    benar-benar siap dipakai browser. Kalau belum, html-to-image
+      //    bisa fallback ke font default saat capture.
+      try {
+        await (document as any).fonts?.ready;
+      } catch {
+        // Lanjut saja kalau API fonts.ready tidak didukung
+      }
+
+      // 2. Pastikan semua <img> foto sudah selesai decode — ini akar
+      //    masalah "template kosong" di HP.
+      await waitForImagesReady(node);
+      await waitTwoFrames();
+
+      // 3. Render "pemanasan": di banyak browser HP (terutama Android
+      //    WebView), capture PERTAMA setelah gambar baru selesai decode
+      //    masih sering keluar kosong/putih. Render sekali, buang
+      //    hasilnya, baru render lagi untuk hasil final — ini workaround
+      //    yang sudah dikenal luas untuk bug html-to-image di mobile.
+      await htmlToImage.toJpeg(node, options).catch(() => null);
+      await waitTwoFrames();
+
+      const dataUrl = await htmlToImage.toJpeg(node, options);
+
+      // 4. Jaga-jaga: kalau hasilnya kosong/super kecil (gagal total),
+      //    jangan disimpan diam-diam sebagai foto kosong — kasih tahu user.
+      if (!dataUrl || dataUrl.length < 1000) {
+        throw new Error('Hasil gambar kosong');
+      }
+
       onSave(dataUrl);
     } catch (err) {
-      alert('Gagal menyimpan gambar. Coba lagi.');
+      alert('Gagal menyimpan gambar. Coba lagi (pastikan semua foto sudah terisi).');
     } finally {
       setIsSaving(false);
     }
