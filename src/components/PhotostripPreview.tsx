@@ -42,35 +42,6 @@ export const PhotostripPreview = forwardRef<HTMLDivElement, PhotostripPreviewPro
     const [dragType, setDragType] = useState<'sticker' | 'text' | null>(null);
     const [selectedSticker, setSelectedSticker] = useState<string | null>(null);
 
-    const handlePointerDown = (e: React.PointerEvent, id: string, type: 'sticker' | 'text') => {
-      if (!interactive) return;
-      e.stopPropagation();
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
-      setDraggingId(id);
-      setDragType(type);
-    };
-
-    const handlePointerMove = (e: React.PointerEvent) => {
-      if (!interactive || !draggingId || !localRef.current) return;
-      const rect = localRef.current.getBoundingClientRect();
-      let x = ((e.clientX - rect.left) / rect.width) * 100;
-      let y = ((e.clientY - rect.top) / rect.height) * 100;
-      x = Math.max(0, Math.min(100, x));
-      y = Math.max(0, Math.min(100, y));
-      if (dragType === 'sticker' && onUpdateSticker) {
-        onUpdateSticker(draggingId, { x, y });
-      } else if (dragType === 'text' && onUpdateText) {
-        onUpdateText(draggingId, { x, y });
-      }
-    };
-
-    const handlePointerUp = (e: React.PointerEvent) => {
-      if (!interactive) return;
-      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-      setDraggingId(null);
-      setDragType(null);
-    };
-
     return (
       <div
         ref={localRef}
@@ -142,7 +113,7 @@ export const PhotostripPreview = forwardRef<HTMLDivElement, PhotostripPreviewPro
               zIndex: draggingId === sticker.id ? 50 : 20,
               pointerEvents: "auto",
             }}
-            onPointerDown={(e) => handlePointerDown(e, sticker.id, 'sticker')}
+      
           >
             {sticker.emoji}
           </div>
@@ -170,43 +141,43 @@ export const PhotostripPreview = forwardRef<HTMLDivElement, PhotostripPreviewPro
           </div>
         ))}
         <Moveable
-          target={
-            selectedSticker
-              ? document.getElementById(`sticker-${selectedSticker}`)
-              : null
-          }
-          draggable={true}
-          scalable={true}
-          rotatable={true}
-          pinchable={true}
-          keepRatio={true}
-          renderDirections={["nw", "ne", "sw", "se"]}
+  target={
+    selectedSticker
+      ? document.getElementById(`sticker-${selectedSticker}`)
+      : null
+  }
+  draggable={true}
+  scalable={true}
+  rotatable={true}
+  pinchable={true}
+  keepRatio={true}
+  renderDirections={["nw", "ne", "sw", "se"]}
 
-          onDrag={({ left, top }) => {
-            if (selectedSticker) {
-              updateSticker(selectedSticker, {
-                x: (left / width) * 100,
-                y: (top / height) * 100,
-              });
-            }
-          }}
+  onDrag={({ left, top }) => {
+    if (selectedSticker) {
+      onUpdateSticker?.(selectedSticker, {
+        x: (left / width) * 100,
+        y: (top / height) * 100,
+      });
+    }
+  }}
 
-          onScale={({ scale }) => {
-            if (selectedSticker) {
-              updateSticker(selectedSticker, {
-                scale: scale[0],
-              });
-            }
-          }}
+  onScale={({ scale }) => {
+    if (selectedSticker) {
+      onUpdateSticker?.(selectedSticker, {
+        scale: scale[0],
+      });
+    }
+  }}
 
-          onRotate={({ beforeRotate }) => {
-            if (selectedSticker) {
-              updateSticker(selectedSticker, {
-                rotation: beforeRotate,
-              });
-            }
-          }}
-        />
+  onRotate={({ beforeRotate }) => {
+    if (selectedSticker) {
+      onUpdateSticker?.(selectedSticker, {
+        rotation: beforeRotate,
+      });
+    }
+  }}
+/>
       </div>
     );
   }
