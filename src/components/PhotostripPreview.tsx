@@ -1,5 +1,6 @@
 import React, { useState, useRef, forwardRef, useImperativeHandle } from 'react';
 import { Template, Photo, Sticker, TextItem } from '../types';
+import Moveable from "react-moveable";
 
 interface PhotostripPreviewProps {
   template: Template;
@@ -39,6 +40,7 @@ export const PhotostripPreview = forwardRef<HTMLDivElement, PhotostripPreviewPro
 
     const [draggingId, setDraggingId] = useState<string | null>(null);
     const [dragType, setDragType] = useState<'sticker' | 'text' | null>(null);
+    const [selectedSticker, setSelectedSticker] = useState<string | null>(null);
 
     const handlePointerDown = (e: React.PointerEvent, id: string, type: 'sticker' | 'text') => {
       if (!interactive) return;
@@ -131,7 +133,9 @@ export const PhotostripPreview = forwardRef<HTMLDivElement, PhotostripPreviewPro
 
         {stickers.map((sticker) => (
           <div
+            id={`sticker-${sticker.id}`}
             key={sticker.id}
+            onClick={() => setSelectedSticker(sticker.id)}
             className={`absolute select-none ${
               interactive ? 'cursor-grab active:cursor-grabbing' : 'pointer-events-none'
             }`}
@@ -169,6 +173,17 @@ export const PhotostripPreview = forwardRef<HTMLDivElement, PhotostripPreviewPro
             {text.text}
           </div>
         ))}
+        <Moveable
+          target={
+            selectedSticker
+              ? document.getElementById(`sticker-${selectedSticker}`)
+              : null
+          }
+          draggable={true}
+          scalable={true}
+          rotatable={true}
+          pinchable={true}
+        />
       </div>
     );
   }
