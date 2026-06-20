@@ -186,25 +186,27 @@ export const PhotostripPreview = forwardRef<HTMLDivElement, PhotostripPreviewPro
           pinchThreshold={0}
 
           onDrag={({ left, top }) => {
-            if (selectedSticker) {
-              updateSticker(selectedSticker, {
+            if (selectedSticker && onUpdateSticker) {
+              onUpdateSticker(selectedSticker, {
                 x: (left / width) * 100,
                 y: (top / height) * 100,
               });
             }
           }}
 
-          onScale={({ scale }) => {
-            if (selectedSticker) {
-              updateSticker(selectedSticker, {
+          onScale={({ scale, drag }) => {
+            if (selectedSticker && onUpdateSticker) {
+              onUpdateSticker(selectedSticker, {
                 scale: scale[0],
+                x: (drag.beforeTranslate[0] / width) * 100,
+                y: (drag.beforeTranslate[1] / height) * 100,
               });
             }
           }}
 
           onRotate={({ beforeRotate }) => {
-            if (selectedSticker) {
-              updateSticker(selectedSticker, {
+            if (selectedSticker && onUpdateSticker) {
+              onUpdateSticker(selectedSticker, {
                 rotation: beforeRotate,
               });
             }
