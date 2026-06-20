@@ -81,7 +81,7 @@ export const PhotostripPreview = forwardRef<HTMLDivElement, PhotostripPreviewPro
           backgroundColor: bgColor,
           transform: `scale(${scale})`,
           transformOrigin: 'top center',
-          touchAction: interactive ? 'none' : 'auto',
+          touchAction: 'pinch-zoom',
         }}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -183,6 +183,13 @@ export const PhotostripPreview = forwardRef<HTMLDivElement, PhotostripPreviewPro
           scalable={true}
           rotatable={true}
           pinchable={true}
+          onScale={({ scale }) => {
+            if (selectedSticker) {
+              updateSticker(selectedSticker, {
+                scale: scale[0]
+              });
+            }
+          }}
         />
       </div>
     );
