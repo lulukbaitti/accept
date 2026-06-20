@@ -135,16 +135,15 @@ export const PhotostripPreview = forwardRef<HTMLDivElement, PhotostripPreviewPro
           <div
             id={`sticker-${sticker.id}`}
             key={sticker.id}
+            className="absolute select-none cursor-grab active:cursor-grabbing"
             onClick={() => setSelectedSticker(sticker.id)}
-            className={`absolute select-none ${
-              interactive ? 'cursor-grab active:cursor-grabbing' : 'pointer-events-none'
-            }`}
             style={{
               left: `${sticker.x}%`,
               top: `${sticker.y}%`,
               transform: `translate(-50%, -50%) scale(${sticker.scale}) rotate(${sticker.rotation}deg)`,
               fontSize: '40px',
               zIndex: draggingId === sticker.id ? 50 : 20,
+              pointerEvents: "auto",
             }}
             onPointerDown={(e) => handlePointerDown(e, sticker.id, 'sticker')}
           >
@@ -183,10 +182,30 @@ export const PhotostripPreview = forwardRef<HTMLDivElement, PhotostripPreviewPro
           scalable={true}
           rotatable={true}
           pinchable={true}
+          keepRatio={true}
+          renderDirections={["nw", "ne", "sw", "se"]}
+
+          onDrag={({ left, top }) => {
+            if (selectedSticker) {
+              updateSticker(selectedSticker, {
+                x: (left / width) * 100,
+                y: (top / height) * 100,
+              });
+            }
+          }}
+
           onScale={({ scale }) => {
             if (selectedSticker) {
               updateSticker(selectedSticker, {
-                scale: scale[0]
+                scale: scale[0],
+              });
+            }
+          }}
+
+          onRotate={({ beforeRotate }) => {
+            if (selectedSticker) {
+              updateSticker(selectedSticker, {
+                rotation: beforeRotate,
               });
             }
           }}
