@@ -11,6 +11,7 @@ export function Gallery() {
   const [strips, setStrips] = useState<Strip[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -42,12 +43,41 @@ export function Gallery() {
     }
   };
 
-  const handleDownload = (strip: Strip) => {
+  const handleDownload = async (strip: Strip) => {
     if (!strip.finalImage) return;
-    const link = document.createElement('a');
-    link.download = `LensaLoka-${strip.id}.jpg`;
-    link.href = strip.finalImage;
-    link.click();
+    setDownloadingId(strip.id);
+    try {
+      // strip.finalImage di sini adalah URL publik dari Supabase Storage
+      // (https://...), BUKAN data: URL lagi seperti waktu masih di tahap
+      // decorate. Atribut `download` pada <a> TIDAK dihormati browser untuk
+      // URL cross-origin — makanya yang terjadi kemarin cuma "membuka" gambar
+      // di tab baru, bukan benar-benar mendownloadnya.
+      //
+      // Solusinya: ambil gambarnya dulu via fetch() jadi blob, baru bikin
+      // object URL LOKAL (blob:) dari situ. Karena blob: dianggap same-origin,
+      // atribut download baru benar-benar dihormati oleh browser, termasuk di HP.
+      const res = await fetch(strip.finalImage);
+      if (!res.ok) throw new Error('Gagal mengambil gambar');
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `LensaLoka-${strip.id}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // Kasih jeda sebelum revoke, supaya browser sempat mulai proses save-nya
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+    } catch (err) {
+      // Fallback kalau fetch gagal (mis. CORS diblok) — minimal user masih
+      // bisa simpan manual lewat tekan-lama / klik kanan di tab baru.
+      window.open(strip.finalImage, '_blank');
+      alert('Tidak bisa download otomatis, gambar dibuka di tab baru. Tekan lama (atau klik kanan) pada gambar lalu pilih "Simpan Gambar".');
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   const handleEdit = (strip: Strip) => {
@@ -126,10 +156,15 @@ export function Gallery() {
               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 sm:gap-3 backdrop-blur-[2px]">
                 <button
                   onClick={() => handleDownload(strip)}
-                  className="w-10 h-10 sm:w-12 sm:h-12 bg-white text-gray-900 rounded-full flex items-center justify-center hover:scale-110 hover:text-pink-600 transition-all shadow-lg"
+                  disabled={downloadingId === strip.id}
+                  className="w-10 h-10 sm:w-12 sm:h-12 bg-white text-gray-900 rounded-full flex items-center justify-center hover:scale-110 hover:text-pink-600 transition-all shadow-lg disabled:opacity-60 disabled:hover:scale-100"
                   title="Download"
                 >
-                  <Download className="w-4 h-4 sm:w-5 sm:h-5" />
+                  {downloadingId === strip.id ? (
+                    <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4 sm:w-5 sm:h-5" />
+                  )}
                 </button>
                 <button
                   onClick={() => handleEdit(strip)}
